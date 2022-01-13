@@ -1,0 +1,256 @@
+---
+title: "Distance analysis"
+author: "JP"
+date: "11/10/2021"
+output: html_document
+---
+
+```{r}
+library(ctmm)
+library(ggplot2)
+library(plot.matrix)
+
+#what are markov chains good for? long term approximation and general trends. they are not predictive except over long times
+
+#applications include 
+#CI for when an animal will leave a box
+#CI for homerange crossing time?
+
+load("/Users/paul/Documents/Work/Research/Fagan Migration/Coding/Mammals/Mammals Data/Cerdocyon_thous.Rda",.GlobalEnv)
+bobData = read.csv("/Users/paul/Documents/Work/Research/Fagan Migration/Coding/pone.0194243.s003.csv")
+
+a = as.telemetry(Cerdocyon_thous)
+a1 = a[[1]]
+
+#this function makes a grid for all of the pionts and returns a number that has the x and y coordinate of the which box each observation is in for all O observations
+
+gridLiner = function(individual,n = 10){
+  totalDistX = (max(individual$x)-min(individual$x))/n
+  totalDistY = (max(individual$y)-min(individual$y))/n
+  invTotalDistX = 1/totalDistX #this makes the code faster btw since division is hard divide once and multiply
+  invTotalDistY = 1/totalDistY
+  
+  xMin = min(individual$x)
+  yMin = min(individual$y)
+  
+  xWMax = which.max(individual$x)
+  yWMax = which.max(individual$y)
+  
+  allCoor = list()
+  
+  for(i in 1:nrow(individual)){
+    xCoor = floor((individual$x[[i]]-xMin)*invTotalDistX)#see just multiply in the loop
+    yCoor = floor((individual$y[[i]]-yMin)*invTotalDistY)
+    nCoor = n*xCoor+yCoor+1
+    allCoor = rbind(allCoor,nCoor)
+  }
+  allCoor[xWMax] = (n-1)*n+floor((individual$y[[xWMax]]-yMin)*invTotalDistY)+1
+  allCoor[yWMax] = floor((individual$x[[yWMax]]-xMin)*invTotalDistX)*n+n
+  return(allCoor)
+}
+
+#testing out the gridliner
+which.max(a1$x)
+which.max(a1$y)
+gridLiner(a1)
+gridLiner(a1)[5281]
+gridLiner(a1,3)
+typeof((gridLiner(a1,10)==57))
+plot(a1$x,a1$y,col = ifelse(gridLiner(a1,10)==57,"red","black"))
+plot(a1$x,a1$y,col = ifelse(gridLiner(a1,10)==56,"red","black"))#poggers it works
+plot(a1$x[gridLiner(a1,10)==57],a1$y[gridLiner(a1,10)==57])
+plot(a1$x[gridLiner(a1,10)==56],a1$y[gridLiner(a1,10)==56])
+
+plot(a1,col="black")
+plot(log(Col2Matrix(Markover2Col(gridLiner(a1)))))
+
+#this function checks where the animal is at after t observations and returns a O-t long list where O is number of observations and t is delay
+
+Markover =  function(individual,fromPoint,n = 10,delay=1){
+  lines = gridLiner(individual,n)
+  pastPoint = list()
+    for(j in 1:(length(lines)-delay)){
+      if(lines[j]==fromPoint){
+        pastPoint = rbind(pastPoint,lines[[j+delay]])
+      }
+    }
+  return(as.vector(pastPoint))
+}
+
+#checking it works
+hist(as.numeric(Markover(a1,89,20)))
+Markover(a1,1,10)
+unique(Markover(a1,3,2))
+unique(Markover(a1,4,2))
+```
+
+
+```{r}
+#this formats the Markov or gridLiner function as a list, where the index of the list is the number of the box coordinate and the value is the proportion of points in that box coordinate for example if the number is 56 is 0.1 then there will be 10% of all points in the box 6,6 (remember that 0-9 is row 1)
+Markover2Col = function(mark,n = 10){
+  mark = as.numeric(mark)
+  marCol = as.list(rep(0,n^2))
+  for(i in unique(mark)){
+    marCol[i] = sum(mark == i)
+  }
+  return(as.numeric(marCol)/length(mark))
+}
+
+Markover2Col(Markover(a1,4,2),2)
+
+#this takes that column and turns it into a matrix with the correct points in each box. It is rotated 90 degrees counter clockwise from what the graph displays tho so you might have to employ apply(t(x),2,rev) to fix that
+Col2Matrix = function(marCol){
+  n = sqrt(length(marCol))
+  marMat = matrix(0,ncol = n, nrow = n)
+  for(i in 1:length(marCol)){
+    x = floor((i-1)/n)+1
+    y = ((i-1) %% n)+1
+    marMat[x,y] = marCol[i]
+  }
+  marMat = marMat
+  return(marMat)
+}
+
+Markover2Col(Markover(a1,56,10),10)
+Col2Matrix(Markover2Col(Markover(a1,56,10),10))
+
+plot(Col2Matrix(Markover2Col(Markover(a1,56,10),10)),fmt.cell='%.4f')#bad
+plot(log(Col2Matrix(Markover2Col(Markover(a1,56,10),10))))#good :)
+plot(log(Col2Matrix(Markover2Col(Markover(a1,56,n = 10,delay = 3),10))))
+plot((Col2Matrix(Markover2Col(Markover(a1,56,n = 10,delay = 16),10))))
+plot(log(Col2Matrix(Markover2Col(Markover(a1,65,10),10))),fmt.cell='%.1f')#good :)
+
+Iterator = function(individual,n = 10){
+  fullMat = matrix(0,ncol=n^2,nrow=n^2)
+  lines = gridLiner(individual,n)
+  for(i in 1:n^2){
+    if(sum(lines == i)>0){
+      mark = Markover(individual,i,n)
+      if(length(mark)>1){
+        for(j in unique(mark)){
+          fullMat[i,j] = sum(mark == j)/length(mark)
+        }
+      }
+    }
+  }
+  return(fullMat)
+}
+
+#testing out the iterator function
+
+test = Iterator(a1,2)
+sum(gridLiner(a1)==99)
+length(Markover(a1,99))
+IterateA1 = Iterator(a1,10)
+IterateA2 = IterateA1%*%IterateA1
+
+#making iterators up to 1000
+IterateA8 = IterateA2%*%IterateA2%*%IterateA2%*%IterateA2
+IterateA16 = IterateA8%*%IterateA8
+IterateA50 = IterateA16%*%IterateA16%*%IterateA16%*%IterateA2
+IterateA100 = IterateA50%*%IterateA50
+IterateA200 =IterateA100 %*% IterateA100
+IterateA1000 = IterateA200%*%IterateA200%*%IterateA200%*%IterateA200%*%IterateA200
+#looking at some iterator matrices
+
+plot(log(IterateA1),border = NA,xlab = "Input",ylab="Output")
+
+IterateA8 = IterateA2%*%IterateA2%*%IterateA2%*%IterateA2
+
+plot(log(IterateA2),border = NA,xlab = "Input",ylab="Output")
+plot(log(IterateA2%*%IterateA2),border = NA,xlab = "Input",ylab="Output")
+plot(log(IterateA8),border = NA,xlab = "Input",ylab="Output")
+plot(log(IterateA1000),border = NA,xlab = "Input",ylab="Output")
+
+#using the iterator for some small values
+
+plot(log(Col2Matrix(Markover2Col(Markover(a1,57,10),10))),fmt.cell='%.1f')
+plot(log(Col2Matrix(Markover2Col(Markover(a1,56,10),10)%*%IterateA1)))
+plot(log(Col2Matrix(Markover2Col(Markover(a1,56,10),10)%*%IterateA2)))
+
+IteratedA8 = Col2Matrix(Markover2Col(Markover(a1,56,10),10)%*%IterateA2%*%IterateA2%*%IterateA2%*%IterateA1)
+
+plot((IteratedA8),fmt.cell='%.1f')
+
+plot(log(Col2Matrix(Markover2Col(Markover(a1,56,10),10)%*%IterateA1000)),breaks=c(-12,0))
+
+plot(log(Col2Matrix(Markover2Col(gridLiner(a1,10),10))),breaks=c(-12,0))
+
+#the following section I plot the residuals at 8 and 1000
+
+Diffs8 = -Col2Matrix(Markover2Col(Markover(a1,56,10,8),10))+IteratedA8
+plot(log(Diffs8),fmt.cell='%.1f',breaks=c(-15,0))
+plot(log(-Diffs8),fmt.cell='%.1f',breaks=c(-15,0))
+
+LogDiffs8 = log(Diffs8)
+LogNegDiffs8 = log(-Diffs8)
+LogDiffs8[is.na(LogDiffs8)]=0
+LogNegDiffs8[is.na(LogNegDiffs8)]=0
+
+plot(LogDiffs8-LogNegDiffs8,fmt.cell='%.1f',breaks=c(-30,30),col =topo.colors)
+
+#to make the "actual" value at 1000 i averaged 40 values around 1k
+
+summationMarkover = 0#lets go 1k out and see if its close to GridLiner
+for(i in 981:1020){
+  summationMarkover = summationMarkover + Markover2Col(Markover(a1,56,10,i))
+}
+
+summationMarkover = summationMarkover/sum(summationMarkover)
+plot(log(Col2Matrix(summationMarkover)))
+
+sum(abs(apply(t(Diffs1000),2,rev)))
+Diffs1000 = -Col2Matrix(Markover2Col(Markover(a1,56,10,1),10)%*%IterateA1000)+Col2Matrix(summationMarkover)
+plot(log(Diffs1000),fmt.cell='%.1f',breaks=c(-15,0))
+plot(log(-Diffs1000),fmt.cell='%.1f',breaks=c(-15,0))
+
+LogDiffs1000 = log(-Diffs1000)
+LogNegDiffs1000 = log(Diffs1000)
+LogDiffs1000[is.na(LogDiffs1000)]=0
+LogNegDiffs1000[is.na(LogNegDiffs1000)]=0
+
+
+plot(apply(t(LogDiffs1000-LogNegDiffs1000),2,rev),fmt.cell='%.1f',breaks=c(-30,30),col =topo.colors)
+plot(apply(t(LogDiffs8-LogNegDiffs8),2,rev),fmt.cell='%.1f',breaks=c(-30,30),col =topo.colors)
+```
+
+
+```{r}
+#linear regression
+
+#define what the regression is trying to get to
+asymptoteA1 = Markover2Col(gridLiner(a1,10),10)
+plot(log(Col2Matrix(asymptoteA1)))
+
+
+#regression
+reg50 = lm(as.vector(Markover2Col(Markover(a1,56,10),10)%*%IterateA50)[asymptoteA1!=0] ~ asymptoteA1[asymptoteA1!=0])#remove 0s to prevent the algorithm from cheating to get extra r^2
+
+summary(reg50)
+plot(asymptoteA1,as.vector(Markover2Col(Markover(a1,56,10),10)%*%IterateA50))
+abline(reg50)
+
+reg200 = lm(as.vector(Markover2Col(Markover(a1,56,10),10)%*%IterateA200)[asymptoteA1!=0] ~ asymptoteA1[asymptoteA1!=0])
+
+summary(reg200)
+plot(asymptoteA1,as.vector(Markover2Col(Markover(a1,56,10),10)%*%IterateA200))
+abline(reg200)
+
+reg1000 = lm(as.vector(Markover2Col(Markover(a1,56,10),10)%*%IterateA1000)[asymptoteA1!=0] ~ asymptoteA1[asymptoteA1!=0])
+
+
+summary(reg1000)
+summary(reg1000)$r.squared
+plot(asymptoteA1,as.vector(Markover2Col(Markover(a1,56,10),10)%*%IterateA1000))
+abline(reg1000)
+plot(residuals(reg1000))
+
+sum(IterateA1!=0)
+sum(IterateA50!=0)
+sum(IterateA1000!=0)
+sum()
+
+sum(Markover2Col(gridLiner(a1))!=0)^2
+(2809-2544)/5
+```
+

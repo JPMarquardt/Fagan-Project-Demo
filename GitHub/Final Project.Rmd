@@ -1,0 +1,86 @@
+---
+title: "Final Project CT vs. AJ"
+author: "JP"
+date: "12/2/2021"
+output: html_document
+---
+
+```{r}
+library(ctmm)
+library(ggplot2)
+library(plot.matrix)
+library(MASS)
+
+load("/Users/paul/Documents/Work/Research/Fagan Migration/Coding/Mammals/Mammals Data/Chrysocyon_brachyurus.Rda",.GlobalEnv)
+load("/Users/paul/Documents/Work/Research/Fagan Migration/Coding/Mammals/Mammals Data/Cerdocyon_thous.Rda",.GlobalEnv)
+
+CT = as.telemetry(Cerdocyon_thous)
+CB = as.telemetry(Chrysocyon_brachyurus)
+
+
+CT1Iterate1 = Iterator(CT[[1]])
+CT2Iterate1 = Iterator(CT[[2]])
+CT3Iterate1 = Iterator(CT[[3]])
+CT4Iterate1 = Iterator(CT[[4]])
+CT5Iterate1 = Iterator(CT[[5]])
+CT6Iterate1 = Iterator(CT[[6]])
+
+CB1Iterate1 = Iterator(CB[[1]])
+CB2Iterate1 = Iterator(CB[[2]])
+CB5Iterate1 = Iterator(CB[[5]])
+CB7Iterate1 = Iterator(CB[[7]])
+CB8Iterate1 = Iterator(CB[[8]])
+CB9Iterate1 = Iterator(CB[[9]])
+
+
+
+
+```
+
+
+```{r}
+iterationsUntilAsymptote = function(data, iterator){
+  R2 = 0
+  asymptote = Markover2Col(gridLiner(data))
+  iterators = iterator
+  counter = 0.5
+  while(R2 < 0.95){
+    prevIterator = iterators
+    iterators = iterators%*%iterators
+    newCheck = as.numeric((rep(1,100)%*%iterators)/sum(rep(1,100)%*%iterators))
+    R2 = cor(asymptote[asymptote!=0],newCheck[asymptote!=0])^2
+    counter = counter*2
+  }
+  iterators = prevIterator
+  R2=0
+  while(R2 < 0.95){
+    iterators = iterators%*%iterator
+    newCheck = as.numeric((rep(1,100)%*%iterators)/sum(rep(1,100)%*%iterators))
+    R2 = cor(asymptote[asymptote!=0],newCheck[asymptote!=0])^2
+    counter = counter+1
+  }
+  return(counter)
+}
+
+iterationsUntilAsymptote(CT[[1]],CT1Iterate1)*4
+iterationsUntilAsymptote(CT[[2]],CT2Iterate1)*4
+iterationsUntilAsymptote(CT[[3]],CT3Iterate1)*4
+iterationsUntilAsymptote(CT[[4]],CT4Iterate1)*4
+iterationsUntilAsymptote(CT[[5]],CT5Iterate1)*4
+iterationsUntilAsymptote(CT[[6]],CT6Iterate1)*4
+
+
+iterationsUntilAsymptote(CB[[1]],CB1Iterate1)*120
+iterationsUntilAsymptote(CB[[2]],CB2Iterate1)*57
+iterationsUntilAsymptote(CB[[5]],CB5Iterate1)*23
+iterationsUntilAsymptote(CB[[7]],CB7Iterate1)*57
+iterationsUntilAsymptote(CB[[8]],CB8Iterate1)*120
+iterationsUntilAsymptote(CB[[9]],CB9Iterate1)*120
+
+CTList = c(1392, 512,408,100,76,312)
+CBList = c(1200,1710,69,114,5760,360)
+
+boxplot(CTList,CBList,names = c("Crab Eating Fox","Maned Wolf"),ylab="Minutes to HomeRange Crossing")
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

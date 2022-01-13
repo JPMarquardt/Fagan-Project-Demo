@@ -1,0 +1,120 @@
+---
+title: "Distance Covariance Analysis"
+author: "JP"
+date: "11/28/2021"
+output: html_document
+---
+
+
+```{r}
+library(ctmm)
+library(ggplot2)
+library(plot.matrix)
+
+
+```
+
+
+```{r}
+daySegmenter = function(individual){
+  D0 = floor(individual$t[[1]]/86400)-1
+  return(floor(individual$t/86400)-D0)
+}
+#daySegmenter(a1)
+
+maxDistFinder = function(individual){
+  days = daySegmenter(individual)
+  allDays = unique(days)
+  allMax = as.list(rep(0,length(allDays)))
+  whenDayStart = 0
+  
+  for(i in allDays){
+    today = individual[days == i,]
+    todayDist = list()
+    
+    for(j in 1:length(today$t)){
+      pointDist = (((today$x[[1]]-today$x[[j]]))^2+((today$y[[1]]-today$y[[j]]))^2)
+      todayDist = c(todayDist,pointDist)
+    }
+    
+    todayMax = which.max(todayDist)
+    allMax[i] = whenDayStart + todayMax
+    whenDayStart = length(today$t) + whenDayStart
+  }
+  return(unlist(allMax))
+}
+#(maxDistFinder(a1))
+
+dayStarts = function(individual){
+  days = daySegmenter(individual)
+  allDays = unique(days)
+  whenDayStart = 0
+  starts = list()
+  for(i in allDays){
+    today = individual[days == i,]
+    starts[i] = whenDayStart
+    whenDayStart = length(today$t) + whenDayStart
+  }
+  starts[1] = 1
+  return(unlist(starts))
+}
+#dayStarts(a1)
+
+maxDist = function(individual){
+  starts = dayStarts(individual)
+  max = maxDistFinder(individual)
+  allMaxDist = as.list(rep(0,length(max)-2))
+  
+  for(i in 2:(length(starts)-1)){
+    pointDist = (((individual$x[[starts[i]]]-individual$x[[max[i]]]))^2+((individual$y[[starts[i]]]-individual$y[[max[i]]]))^2)
+    allMaxDist[i-1] = pointDist
+  }
+  return(unlist(allMaxDist))
+}
+#maxDist(a1)
+plot(1:50,maxDist(a1))
+cor(maxDist(a1)[1:49],maxDist(a1)[2:50])#no correlation at all
+
+allDist = function(individual){
+  starts = dayStarts(individual)
+  days = daySegmenter(individual)
+  allDistTotal = as.list(rep(0,(length(starts)-2)))
+  
+  for(i in 2:(length(starts)-1)){
+    today = individual[days == i,]
+    pointDistTotal = 0
+    for(j in 1:(length(today$x)-1)){
+      pointDist = sqrt(((today$x[[i]]-today$x[[i+1]]))^2+((today$y[[i]]-today$y[[i+1]]))^2)
+      pointDistTotal = pointDistTotal + pointDist
+    }
+    allDistTotal[i-1] = pointDistTotal
+  }
+  return(unlist(allDistTotal))
+}
+#allDist(a1)
+```
+
+
+```{r}
+plot(allDist(a1))
+plot(allDist(a2))
+plot(allDist(a[[3]]))
+plot(allDist(a[[4]]))
+plot(allDist(a[[5]]))
+cor(allDist(a1)[1:49],allDist(a1)[2:50])#no linear correlation, but there's a slight patter
+
+plot(a1[daySegmenter(a1)==46,]$x,a1[daySegmenter(a1)==46,]$y,type="l")
+plot(a1$x,a1$y,col = "black")
+points(a1$x[daySegmenter(a1)==35],a1$y[daySegmenter(a1)==35],col = "red")
+plot(a1[daySegmenter(a1)==35,]$x,a1[daySegmenter(a1)==35,]$y,type = "l")
+plot(a1[daySegmenter(a1)==29,])
+plot(a1[daySegmenter(a1)==17,])
+plot(a1[daySegmenter(a1)==6,])
+
+plot(a2[daySegmenter(a2)==8,])
+plot(a2$x,a2$y,col = "black")
+lines(a2$x[daySegmenter(a2)==8],a2$y[daySegmenter(a2)==8],col = "red")
+lines(a2$x[daySegmenter(a2)==9],a2$y[daySegmenter(a2)==9],col = "blue")
+lines(a2$x[daySegmenter(a2)==10],a2$y[daySegmenter(a2)==10],col = "green")
+```
+

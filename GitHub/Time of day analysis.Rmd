@@ -1,0 +1,204 @@
+---
+title: "Time of Day Analysis"
+author: "JP"
+date: "11/3/2021"
+output: html_document
+---
+
+```{r}
+library(ctmm)
+library(ggplot2)
+library(plot.matrix)
+library(stringr)
+#you have to import the bobcat data and the crab eating fox data yourself since its already in my global env
+#and set it to a and b
+load("/Users/paul/Documents/Work/Research/Migration/Coding/Mammals/Mammals Data/Cerdocyon_thous.Rda",.GlobalEnv)
+bobData = read.csv("/Users/paul/Documents/Work/Research/Migration/Coding/pone.0194243.s003.csv")
+
+a = as.telemetry(Cerdocyon_thous)
+a1 = a[[1]]
+date = str_split(bobData$Date_,"-",simplify = TRUE)
+timestamp = paste(gsub(" ","",paste("20",date[,3],"-",match(date[,2],month.abb),"-",date[,1])),gsub(" ","",paste(bobData$Time_)))
+bobData=cbind(bobData[,c(3,4,6)],"S",bobData[,7],"E",1,0,timestamp,bobData[,2])
+
+names(bobData) = names(Acinonyx_jubatus)
+b = as.telemetry(bobData)
+
+MovT = function(individual, subTime){
+  nSubset = floor(24*60*60/subTime)
+  secondOfDay = individual$t %% 86400
+  VarT = vector()
+  for(i in 1:nSubset){
+    a = secondOfDay >= ((i-1)*subTime)
+    b = secondOfDay < (i*subTime)
+    c = a*b
+    
+    atHourI = na.omit(individual[c == 1,])
+    VarT = c(VarT,var(atHourI$x))
+  }
+  return(VarT)
+}
+
+
+test1 = MovT(a1,1800)
+plot(seq(from = 0, to = 23.5, by = 0.5),unlist(test1),ylab = "Variance",xlab = "Time of Day", main = "Crab Eating Fox Variance Half Hourly")
+
+test2 = MovT(a1,15*60)
+plot(c(49:96,1:48),test2)#starting at noon to see the nice peak
+
+VarListFox = data.frame()
+for(i in 1:length(a)){
+  VarListFox = rbind(VarListFox,MovT(a[[i]],1800))
+}
+
+plot(seq(from = 0, to = 23.5, by = 0.5),colMeans(VarListFox), ylab = "Variance",xlab = "Time of Day", main = "Average Crab Eating Fox Variance Half Hourly")
+
+VarListBob = data.frame()
+for(j in 1:length(b)){
+  VarListBob = rbind(VarListBob,MovT(b[[j]],3600))
+}
+
+names(VarListBob) = 0:23
+
+NaTimes = (!is.na(VarListBob)) #this is why bobcat data is bad btw false mean no data
+plot(NaTimes, main = "Times Represented in sampling for all animals", xlab = "Time of day", ylab = "Sample number")
+
+print("This is the distribution of times represented")
+colSums(NaTimes)#the bias of the data
+print("This gives a feeling for how bad ")
+rowSums(NaTimes)#the number of times represented in each cat 
+#look at number 8 with 69 observations but only 6 times represented
+sum(!NaTimes)/(sum(NaTimes)+sum(!NaTimes))#proporiton of times not represented
+b[[8]]
+
+plot(seq(from = 0, to = 23, by = 1), colMeans(VarListBob, na.rm = TRUE), ylab = "Variance",xlab = "Time of Day", main = "Average BobCat Variance Hourly")
+#only 4 bobcats have data at 17 which leads to the extreme spike
+```
+
+
+```{r}
+
+SampleT = function(individual, subTime){
+  nSubset = floor(24*60*60/subTime)
+  secondOfDay = individual$t %% 86400
+  SumT = vector()
+  for(i in 1:nSubset){
+    a = secondOfDay >= ((i-1)*subTime)
+    b = secondOfDay < (i*subTime)
+    c = a*b
+    
+    SumT = c(SumT,sum(c))
+  }
+  return(SumT/sum(SumT))
+}
+
+sampleDistA1 = SampleT(a[[1]],1800)
+sampleDistB8 = SampleT(b[[8]],3600)
+
+plot(1:48,sampleDistA1)#this is akin to residuals if there is no pattern then you are good to go
+plot(1:24,sampleDistB8)
+
+sampleListBob = matrix(ncol = 24)
+for(i in 1:length(b)){
+  sampleListBob = rbind(sampleListBob,SampleT(b[[i]],3600))
+}
+sampleListBob = na.omit(sampleListBob)
+
+plot(sampleListBob*100, ylab = "individual number",xlab = "hour of the day",cex=0.75,fmt.cell='%.1f',border = NA,breaks=c(0,15))
+
+sampleListFox = matrix(ncol = 24)
+for(i in 1:length(a)){
+  sampleListFox = rbind(sampleListFox,SampleT(a[[i]],3600))
+}
+sampleListFox = na.omit(sampleListFox)
+
+plot(sampleListFox*100, ylab = "individual number",xlab = "hour of the day",cex=0.75,fmt.cell='%.1f',border = NA,breaks=c(0,15))
+plot(sampleListFox*100-100/24, ylab = "individual number",xlab = "hour of the day",cex=0.75,fmt.cell='%.1f',border = NA,)
+hist(sampleListFox*100)
+hist(sampleListBob*100)
+qqnorm(sampleListBob)
+qqnorm(sampleListFox)
+```
+
+
+```{r}
+VarSampleT = function(individual, subTime){
+  return(var(SampleT(individual, subTime)*100))
+}
+
+VarSampleT(a[[1]],3600) #function works and gives good data
+VarSampleT(a[[2]],3600)
+VarSampleT(b[[8]],3600)
+VarSampleT(b[[11]],3600)
+
+ts = seq(from = 60, to = 43200, by = 60)
+
+VarOTa = vector()
+VarOTa2 = vector()
+VarOTb = vector()
+VarOTtest = 86400 %% ts#the number of seconds left out of the model
+
+for(i in ts){
+  VarOTa = c(VarOTa, VarSampleT(a[[1]],i))
+  VarOTa2 = c(VarOTa2, VarSampleT(a[[2]],i))
+  VarOTb = c(VarOTb, VarSampleT(b[[8]],i))
+}
+
+plot(ts,VarOTa,xlab = "ammount of time per subset", ylab= "variance")#weird distribution
+plot(ts,VarOTa2)
+plot(ts,VarOTb)
+plot(ts,VarOTtest/86400)
+
+which.max(VarOTa2[1:480])
+which.min(VarOTa2[481:720])
+
+plot(ts,VarOTa-VarOTtest/(86400*60*60*4))#not a valid method probably
+
+plot(ts,VarOTa2/VarOTa)
+
+#need to characterize the behavior of the function
+#it obviously has to do with harmonics as the peaks are at day/3 day/4 day/5 etc.
+
+
+```
+
+
+```{r}
+SampleRate = function(individual){
+ (max(individual$t)-min(individual$t))/nrow(individual)
+}
+SampleRate(a1)
+SampleRate(a2)
+SampleRate(b[[8]])
+
+SampleT2 = function(individual, nSubset){
+  subTime = 24*60*60/nSubset
+  secondOfDay = individual$t %% 86400
+  SumT = vector()
+  for(i in 1:nSubset){
+    a = secondOfDay >= ((i-1)*subTime)#this can be done by using & notation if you actually care this is a linear algebra solution to a logic problem
+    b = secondOfDay < (i*subTime)
+    c = a*b
+    
+    SumT = c(SumT,sum(c))
+  }
+  return(SumT/sum(SumT))
+}
+
+VarOT2a = vector()
+VarOT2b = vector()
+
+for(i in 1:720){
+  VarOT2a = c(VarOT2a, var(SampleT2(a[[1]],i)))
+  VarOT2b = c(VarOT2b, var(SampleT2(b[[8]],i)))
+}
+plot((1:720),1/(VarOT2a),xlab = "Number of subsets",ylab = "Inverse Variance")
+plot((1:720),1/(VarOT2b),xlab = "Number of subsets",ylab = "Inverse Variance")#so you want not linear for this method
+which.max(1/(VarOT2a))#there is a peak when 86400/nSubsets equals 290 seconds this was the Average sampling rate then again there is a wobble around 145s
+SampleRate(a[[1]])
+as.numeric(lapply(a,SampleRate))/60
+which.max(1/VarOT2b[1:20])#there is a peak when 86400/nsubsets = 8 hours  the average sampling rate was 8.23 hours
+(SampleRate((b[[8]]))/3600)
+as.numeric(lapply(b,SampleRate))/3600
+```
+
